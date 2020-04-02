@@ -1,0 +1,57 @@
+---
+## Playbook to perform patching on CentOS server.
+
+- hosts: webserver
+  serial: 2
+
+
+  tasks:
+    # Purpose: To check if application is running or not.
+    - name: To make sure application/database processes are not running
+      shell: if ps -eaf | egrep 'apache|http'|grep -v grep > /dev/null ;then echo 'process_running' else echo 'process_not_running' ;fi
+      ignore_errors: true
+      register: app_process_check
+
+    # Purpose: Decision making. Playbook will fail/quit if application process found running.
+    - name: Decision point before proceeding with patching
+      fail: msg="{{ inventory_hostname }} have application process running. Please stop the application first and retry patching"
+      when: app_process_check.stdout == "process_running"
+
+    # Purpose: Upgrade/Install the RPM when appication process is stopped
+    - name: Upgrade/Install packages oon the server
+      yum:
+       name="kernel"
+       state=latest
+      when: app_process_check.stdout == "process_not_running" and ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux'
+      register: yum_update
+
+    # Purpose: To verify if kernel is updated and is system needs a reboot
+    - name: Check if reboot is required after kernel update
+      shell: KERNEL_NEW=$(rpm -q --last kernel |head -1 | awk '{print $1}' | sed 's/kernel-//'); KERNEL_NOW=$(uname -r); if[[ $KERNEL_NEW != $KERNEL_NOW ]]; then echo "reboot needed"; else echo "reboot not  needed"; fi
+      ignore_errors: true
+      register: reboot_required
+
+    # Purpose: To restart the server
+    - name: restart system
+      command: shutdown -r +1 "Rebooting system after patching"
+      async: 0
+      poll: 0
+      when: reboot_required.stdout == "reboot needed"
+      register: reboot_started
+      ignore_errors: true
+
+    # Purpose: To wait for 3 minutes for server to come up
+    - name: pause for 180 secs
+      pause:
+        minutes: 3
+
+    # Purpose: To check and confirm if system is up and responding to ssh
+    - name: check if system is responding to ssh
+      local_action:
+        module: wait_for
+          host={{ inventory_hostname }}
+          port=22
+          delay=15
+          timeout=300
+          state=started
+      when: reboot_started|changed
