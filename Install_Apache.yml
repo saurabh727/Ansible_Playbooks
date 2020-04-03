@@ -7,7 +7,7 @@
 
   tasks:
 
-    - name: Install apache
+    - name: Install apache rpm
       yum: name=httpd state=present
 
     - name: Start httpd
