@@ -37,7 +37,7 @@
           count: 1
           instance_tags:
             Name: Ansible_EC2
-            Owner: Saurabh
+            Owner: yogi
           monitoring: no
           vpc-subnet_id: subnet-e628198e
           assign_public_ip: yes
